@@ -1,0 +1,19 @@
+{
+  "name": "sigtune",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Sinon-Host/Sigtune.git"
+  },
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/Sinon-Host/Sigtune/issues"
+  },
+  "homepage": "https://github.com/Sinon-Host/Sigtune#readme"
+}
