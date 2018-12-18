@@ -6,6 +6,9 @@ const Member = require('./../structures/Member');
 const Message = require('./../structures/Message');
 const User = require('./../structures/User');
 
+const Constants = require('./../util/Constants');
+const OPCodes = Constants.GatewayOPCodes;
+
 let WebSocket;
 try {
     WebSocket = require('uws');
@@ -61,12 +64,12 @@ class Client extends EventEmitter {
         this.ws.removeAllListeners();
 
         this.ws.once('open', () => this.identify());
-        this.ws.on('error', (err) => { console.error('Websocket error', err); });
+        this.ws.on('error', (err) => { this.emit('error', 'Websocket error', err); });
         this.ws.on('message', (data) => this.onWS(data));
 
 
         this.ws.on('close', (code) => {
-            console.error('Websocket closed', code);
+            this.emit('warn', 'Websocket closed', code);
 
             if (code === 1000) {
                 clearInterval(this.heartbeatInterval);
@@ -93,12 +96,12 @@ class Client extends EventEmitter {
         }
 
         this.ws.send(JSON.stringify({
-            op: 2,
+            op: OPCodes.IDENTIFY,
             d: {
                 token: `Bot ${this.token}`,
-                properties: { $os: process.platform, $browser: 'test-lib', $device: 'test-lib' },
-                compress: false,
-                large_threshold: this.largeThreshold,
+                properties: { $os: process.platform, $browser: 'Sigtune', $device: 'Sigtune' },
+                compress: this.compress || false,
+                large_threshold: this.largeThreshold || 250,
                 shard: [this.shardID, this.shardCount],
                 presence: this.presence,
             },
@@ -130,14 +133,12 @@ class Client extends EventEmitter {
      * @memberof Client
      */
     resume() {
-        if (!this.ws) {
-            this.ws = new WebSocket('wss://gateway.discord.gg/?v=6&encoding=json');
-        }
+        if (!this.ws) { this.ws = new WebSocket('wss://gateway.discord.gg/?v=6&encoding=json'); }
 
         this.ws.once('open', () => {
             if (this.ws.readyState === WebSocket.OPEN) {
                 this.ws.send(JSON.stringify({
-                    op: 6,
+                    op: OPCodes.RESUME,
                     d: {
                         token: `Bot ${this.token}`,
                         session_id: this.sessionID,
@@ -171,22 +172,22 @@ class Client extends EventEmitter {
         this.seq = data.s;
 
         switch (data.op) {
-            case 0:
+            case OPCodes.EVENT:
                 this.handleDispatch(data);
                 break;
-            case 1:
+            case OPCodes.HEARTBEAT:
                 this.handleHeartBeat();
                 break;
-            case 7:
+            case OPCodes.RECONNECT:
                 this.emit('error', 'Reconnecting to websocket');
-                console.error('OP7 Reconnecting to websocket');
+
                 this.disconnect();
                 setTimeout(() => {
                     this.connect();
                 }, 6000);
                 this.connect();
                 break;
-            case 9:
+            case OPCodes.INVALID_SESSION:
                 this.emit('warn', 'Invalid session reidenifying');
 
                 if (data.d === true && this.sessionID) {
@@ -200,12 +201,12 @@ class Client extends EventEmitter {
 
                 this.identify();
                 break;
-            case 10:
+            case OPCodes.HELLO:
                 if (this.heartbeatInterval) { clearInterval(this.heartbeatInterval); }
 
                 this.heartbeatInterval = setInterval(() => { this.handleHeartBeat(); }, data.d.heartbeat_interval);
                 break;
-            case 11:
+            case OPCodes.HEARTBEAT_ACK:
                 this.ping = new Date() - this.sendTime;
 
                 if (!this.pings) { this.pings = []; }
@@ -223,17 +224,14 @@ class Client extends EventEmitter {
      * Handle heartbeating with the websocket
      *
      * @memberof Client
+     * @returns {undefined}
      */
     handleHeartBeat() {
-        if (!this.ws || this.ws.readyState === 3 || this.ws.readyState === 2) {
-            clearInterval(this.heartbeatInterval);
-
-            return;
-        }
+        if (!this.ws || this.ws.readyState === 2 || this.ws.readyState === 3) { return clearInterval(this.heartbeatInterval); }
 
         this.emit('debug', 'Sending heartbeat');
 
-        this.ws.send(JSON.stringify({ op: 1, d: this.seq }));
+        this.ws.send(JSON.stringify({ op: OPCodes.HEARTBEAT, d: this.seq }));
         this.sendTime = new Date();
     }
 
@@ -244,7 +242,6 @@ class Client extends EventEmitter {
      * @memberof Client
      */
     handleDispatch(data) {
-        this.emit('debug', data);
         switch (data.t) {
             case 'PRESENCE_UPDATE':
                 this.emit('presenceUpdate', data.d);
@@ -363,7 +360,7 @@ class Client extends EventEmitter {
      */
     getGuildMembers(guildID) {
         if (!guildID) { return; }
-        this.ws.send(JSON.stringify({ op: 8, d: { guild_id: guildID, query: '', limit: 0 } }));
+        this.ws.send(JSON.stringify({ op: OPCodes.GET_GUILD_MEMBERS, d: { guild_id: guildID, query: '', limit: 0 } }));
     }
 
     /**
